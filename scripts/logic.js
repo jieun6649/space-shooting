@@ -25,9 +25,10 @@ let powerUpDuration = 5; // seconds
 //우주선 좌표
 let spaceshipX = canvas.width / 2 - 30;
 let spaceshipY = canvas.height - 60;
+let spaceshipPowerHistory = {};
 
 //총알들을 저장하는 list
-let bulletList = [];
+let bulletJson = {};
 
 //총알의 좌표
 function Bullet() {
@@ -39,11 +40,16 @@ function Bullet() {
     this.x = spaceshipX + 20;
     this.y = spaceshipY;
     this.alive = true; //총알의 상태 true면 살아있는 총알 false면 죽은 총알
-    bulletList.push(this);
+    this.id = String(Math.random());
+    bulletJson[this.id] = this;
   };
 
   this.update = function () {
     this.y -= 20;
+    if (this.y <= 0) {
+      this.alive = false;
+      delete bulletJson[this.id];
+    }
   };
 
   this.checkHit = function () {
@@ -55,6 +61,13 @@ function Bullet() {
       ) {
         //총알이 죽게됨, 적군의 우주선이 없어짐, 점수 획득
         score++;
+
+        // 적군의 우저선을 격추시키면 아이템 드랍
+        // 다음 조건문을 추가하는 것으로 아이템 드랍 확률 조정 가능
+        // if (Math.random() < 0.1) { // 적군의 우주선을 격추시켰을 때, 10% 확률로 아이템 획득
+        createItem(enemyList[i].x, enemyList[i].y);
+        console.log("아이템 드랍!");
+
         this.alive = false; //죽은 총알
         enemyList.splice(i, 1); //i번째값 1개를 잘라내자
       }
@@ -89,18 +102,38 @@ function Enemy() {
   };
 }
 
-let itemList = [];
+let itemJson = {};
 //아이템 만들기
 function Item() {
   this.x = 0;
   this.y = 0;
   this.init = function () {
-    this.y = 0;
     this.x = generateRandomValue(0, canvas.width - 48);
-    itemList.push(this);
+    this.y = 0;
+    this.id = String(Math.random());
+    itemJson[this.id] = this;
   };
   this.update = function () {
     this.y += 2; //아이템 속도 조절
+    if (this.y >= canvas.height) {
+      this.alive = false;
+      delete itemJson[this.id];
+    }
+  };
+
+  this.checkHit = function () {
+    if (
+      this.y >= spaceshipY &&
+      this.x >= spaceshipX &&
+      this.x <= spaceshipX + 40
+    ) {
+      //우주선의 파워가 1 증가함
+      delete itemJson[this.id];
+      this.alive = false;
+
+      // 10초동안 파워업 시키기 위해서 지금부터 10초 후로 파워가 사라질 시간 지정
+      spaceshipPowerHistory[this.id] = Math.round(Date.now() / 1000 + 10);
+    }
   };
 }
 
@@ -146,17 +179,24 @@ function setKeyboardListener() {
 
     //스페이스바 = 32
     if (event.keyCode == 32) {
-      createBullet(); //총알 생성
+      powerSize = Object.keys(spaceshipPowerHistory).length + 1;
+      for (let i = 0; i < powerSize; i++) {
+        createBullet(i * 20 - (powerSize - 1) * 10); //총알 생성
+      }
     }
   });
 }
 
-//총알 만들기
-function createBullet() {
+// 총알 만들기
+function createBullet(xDiff) {
   console.log("총알생성!");
   let b = new Bullet(); // 함수 Bullet을 한개 더 만든다.
   b.init();
-  console.log("새로운 총알 리스트", bulletList);
+  // 총알을 여러 개 발사하면 우주선을 중심으로 대칭을 이뤄야 하는데
+  // 이를 위해서 우주선의 xDiff 만큼 옆에 만듭니다.
+  b.x += xDiff;
+
+  console.log("새로운 총알 리스트", bulletJson);
 }
 
 //적군 만들기
@@ -169,13 +209,13 @@ function createEnemy() {
   //1초 -> 1000
 }
 
-//아이템 만들기
-function createItem() {
+// 주어진 x, y 좌표에 아이템 만들기
+function createItem(x, y) {
   console.log("아이템 생성!");
-  const makeItem = setInterval(function () {
-    let item = new Item();
-    item.init();
-  }, 500);
+  let item = new Item();
+  item.init();
+  item.x = x;
+  item.y = y;
 }
 
 //값을 update시켜주는 부분
@@ -201,10 +241,11 @@ function update() {
   }
 
   //총알의 y좌표 업데이트하는 함수 호출
-  for (let i = 0; i < bulletList.length; i++) {
-    if (bulletList[i].alive) {
-      bulletList[i].update();
-      bulletList[i].checkHit();
+  for (let bulletID in bulletJson) {
+    let bullet = bulletJson[bulletID];
+    if (bullet.alive) {
+      bullet.update();
+      bullet.checkHit();
     }
   }
 
@@ -214,8 +255,10 @@ function update() {
   }
 
   //아이템 y좌표 업데이트하는 함수 호출
-  for (let i = 0; i < itemList.length; i++) {
-    itemList[i].update();
+  for (let itemID in itemJson) {
+    let item = itemJson[itemID];
+    item.update();
+    item.checkHit();
   }
 }
 
@@ -231,9 +274,10 @@ function render() {
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
   //총알 그려주기
-  for (let i = 0; i < bulletList.length; i++) {
-    if (bulletList[i].alive) {
-      ctx.drawImage(bulletImage, bulletList[i].x, bulletList[i].y);
+  for (let bulletID in bulletJson) {
+    let bullet = bulletJson[bulletID];
+    if (bullet.alive) {
+      ctx.drawImage(bulletImage, bullet.x, bullet.y);
     }
   }
   //적군 그려주기
@@ -241,8 +285,16 @@ function render() {
     ctx.drawImage(enemyImage, enemyList[j].x, enemyList[j].y);
   }
   //아이템 그려주기
-  for (let i = 0; i < itemList.length; i++) {
-    ctx.drawImage(itemImage, itemList[i].x, itemList[i].y);
+  for (let itemID in itemJson) {
+    let item = itemJson[itemID];
+    ctx.drawImage(itemImage, item.x, item.y);
+  }
+
+  for (let powerID in spaceshipPowerHistory) {
+    let powerDeadline = spaceshipPowerHistory[powerID];
+    if (Math.round(Date.now() / 1000) >= powerDeadline) {
+      delete spaceshipPowerHistory[powerID];
+    }
   }
 }
 
@@ -262,5 +314,4 @@ function main() {
 loadImage();
 setKeyboardListener();
 createEnemy();
-createItem();
 main();
